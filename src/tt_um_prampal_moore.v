@@ -1,87 +1,68 @@
 /*
- * Copyright (c) 2024 Your Name
+ * Copyright (c) 2024
  * SPDX-License-Identifier: Apache-2.0
  */
 
 `default_nettype none
 
 module tt_um_prampal_moore (
-    input  wire [7:0] ui_in,    // Dedicated inputs
-    output wire [7:0] uo_out,   // Dedicated outputs
-    input  wire [7:0] uio_in,   // IOs: Input path
-    output wire [7:0] uio_out,  // IOs: Output path
-    output wire [7:0] uio_oe,   // IOs: Enable path (active high: 0=input, 1=output)
-    input  wire       ena,      // always 1 when the design is powered, so you can ignore it
-    input  wire       clk,      // clock
-    input  wire       rst_n     // reset_n - low to reset
+    input  wire [7:0] ui_in,    // inputs
+    output wire [7:0] uo_out,   // outputs
+    input  wire [7:0] uio_in,   // bidir inputs
+    output wire [7:0] uio_out,  // bidir outputs
+    output wire [7:0] uio_oe,   // bidir enables
+    input  wire       ena,
+    input  wire       clk,
+    input  wire       rst_n
 );
 
-     // input
+    // Input
     wire x1 = ui_in[0];
-    // output
-    wire z1;
-    reg [1:3] y;
-    reg [1:3] next_state;
 
-    parameter state_a=3'b000,
-        state_b=3'b010,
-        state_c=3'b110,
-        state_d=3'b100,
-        state_e=3'b011;
+    // State registers
+    reg [2:0] state;
+    reg [2:0] next_state;
 
-    always@(posedge clk)
-    begin
-        if(~rst_n)
-            y<=state_a;
+    // State encoding
+    localparam STATE_A = 3'b000;
+    localparam STATE_B = 3'b001;
+    localparam STATE_C = 3'b010;
+    localparam STATE_D = 3'b011;
+    localparam STATE_E = 3'b100;
+
+    // Sequential logic
+    always @(posedge clk) begin
+        if (!rst_n)
+            state <= STATE_A;
         else
-            y<=next_state;
-        end
-    assign z1 = ~clk & y[3];
-always@(y or x1)
-begin
-case(y)
-state_a:
-if(x1==0)
-next_state=state_a;
-else
-next_state=state_b;
-state_b:
-if(x1==0)
-next_state=state_a;
-else
-next_state=state_c;
-state_c:
-if(x1==0)
-next_state=state_d;
-else
-next_state=state_c;
-state_d:
-if(x1==0)
-next_state=state_a;
-else
-next_state=state_e;
-state_e:
-if(x1==0)
-next_state=state_a;
-else
-next_state=state_c;
-default:next_state=state_a;
-endcase
-end
+            state <= next_state;
+    end
 
-// All output pins must be assigned. If not used, assign to 0.
-assign uo_out[0] = y[1];
-assign uo_out[1] = y[2];
-assign uo_out[2] = y[3];
-assign uo_out[3] = z1;
-assign uo_out[4] = 1'b0;
-assign uo_out[5] = 1'b0;
-assign uo_out[6] = 1'b0;
-assign uo_out[7] = 1'b0;
-assign uio_out = 0;
-assign uio_oe = 0;    
-    
-  // List all unused inputs to prevent warnings
-  wire _unused = &{ena, ui_in[7:1], uio_in, 1'b0};
+    // Next-state logic (combinational)
+    always @(*) begin
+        case (state)
+            STATE_A: next_state = x1 ? STATE_B : STATE_A;
+            STATE_B: next_state = x1 ? STATE_C : STATE_A;
+            STATE_C: next_state = x1 ? STATE_C : STATE_D;
+            STATE_D: next_state = x1 ? STATE_E : STATE_A;
+            STATE_E: next_state = x1 ? STATE_C : STATE_A;
+            default: next_state = STATE_A;
+        endcase
+    end
+
+    // Moore output (depends ONLY on state)
+    wire z1 = (state == STATE_E);
+
+    // Output mapping
+    assign uo_out[2:0] = state;
+    assign uo_out[3]   = z1;
+    assign uo_out[7:4] = 4'b0000;
+
+    // Unused bidirectional pins
+    assign uio_out = 8'b00000000;
+    assign uio_oe  = 8'b00000000;
+
+    // Prevent unused warnings
+    wire _unused = &{ena, ui_in[7:1], uio_in, 1'b0};
 
 endmodule
